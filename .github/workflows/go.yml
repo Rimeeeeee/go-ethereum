@@ -3,8 +3,6 @@ on:
     branches:
       - master
   pull_request:
-    branches:
-      - master
   workflow_dispatch:
 
 # Free runner capacity by cancelling superseded PR runs.
