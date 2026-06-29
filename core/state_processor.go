@@ -440,6 +440,9 @@ func AssembleBlock(chain consensus.ChainHeaderReader, header *types.Header, stat
 	if !chain.Config().IsAmsterdam(header.Number, header.Time) {
 		return types.NewBlock(header, body, receipts, trie.NewStackTrie(nil))
 	}
+	if chain.Config().IsBogota(header.Number, header.Time) {
+		state.FillBlockAccessListStorageRoots(blockAccessList)
+	}
 	// Assign the BlockAccessListHash if Amsterdam has been enabled
 	bal := blockAccessList.ToEncodingObj()
 	balHash := bal.Hash()

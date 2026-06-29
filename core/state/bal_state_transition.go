@@ -531,6 +531,26 @@ func (s *BALStateTransition) IntermediateRoot(_ bool) common.Hash {
 	return s.rootHash
 }
 
+// FillBlockAccessListStorageRoots annotates state-changing BAL entries with
+// the post-block storage roots computed by IntermediateRoot.
+func (s *BALStateTransition) FillBlockAccessListStorageRoots(blockAccessList *bal.ConstructionBlockAccessList) {
+	if blockAccessList == nil {
+		return
+	}
+	for addr, acc := range blockAccessList.Accounts {
+		if !acc.HasStateChanges() {
+			continue
+		}
+		root := types.EmptyRootHash
+		if _, deleted := s.deletions[addr]; !deleted {
+			if acct := s.postStates[addr]; acct != nil {
+				root = acct.Root
+			}
+		}
+		blockAccessList.SetStorageRoot(addr, root)
+	}
+}
+
 func (s *BALStateTransition) Preimages() map[common.Hash][]byte {
 	// TODO: implement this
 	return make(map[common.Hash][]byte)

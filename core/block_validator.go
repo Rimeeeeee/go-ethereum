@@ -19,10 +19,11 @@ package core
 import (
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/types/bal"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 )
@@ -145,6 +146,7 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 
 type StateRootSource interface {
 	IntermediateRoot(deleteEmptyObjects bool) common.Hash
+	FillBlockAccessListStorageRoots(blockAccessList *bal.ConstructionBlockAccessList)
 	Error() error
 }
 
@@ -187,6 +189,7 @@ func (v *BlockValidator) ValidateState(block *types.Block, state StateRootSource
 	} else if res.Requests != nil {
 		return errors.New("block has requests before prague fork")
 	}
+	root := state.IntermediateRoot(v.config.IsEIP158(header.Number))
 	// Verify Block-level accessList once Amsterdam is enabled
 	if v.config.IsAmsterdam(block.Number(), block.Time()) {
 		if res.Bal == nil {
@@ -194,6 +197,9 @@ func (v *BlockValidator) ValidateState(block *types.Block, state StateRootSource
 		}
 		if block.Header().BlockAccessListHash == nil {
 			return errors.New("block access list hash not set in header")
+		}
+		if v.config.IsBogota(block.Number(), block.Time()) {
+			state.FillBlockAccessListStorageRoots(res.Bal)
 		}
 		enc := res.Bal.ToEncodingObj()
 		local, remote := enc.Hash(), *block.Header().BlockAccessListHash
@@ -206,7 +212,7 @@ func (v *BlockValidator) ValidateState(block *types.Block, state StateRootSource
 	}
 	// Validate the state root against the received state root and throw
 	// an error if they don't match.
-	if root := state.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
+	if header.Root != root {
 		return fmt.Errorf("invalid merkle root (remote: %x local: %x) dberr: %w", header.Root, root, state.Error())
 	}
 	return nil

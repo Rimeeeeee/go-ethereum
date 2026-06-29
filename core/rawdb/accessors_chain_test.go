@@ -912,6 +912,7 @@ func makeTestBAL(t *testing.T) (rlp.RawValue, *bal.BlockAccessList) {
 	cb.StorageWrite(0, addr, common.BytesToHash([]byte{0x02}), common.BytesToHash([]byte{0xaa}))
 	cb.BalanceChange(0, addr, uint256.NewInt(100))
 	cb.NonceChange(addr, 0, 1)
+	cb.SetStorageRoot(addr, types.EmptyRootHash)
 
 	var buf bytes.Buffer
 	if err := cb.EncodeRLP(&buf); err != nil {

@@ -160,6 +160,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 
 		isEIP4762   = chainConfig.IsUBT(big.NewInt(int64(pre.Env.Number)), pre.Env.Timestamp)
 		isAmsterdam = chainConfig.IsAmsterdam(big.NewInt(int64(pre.Env.Number)), pre.Env.Timestamp)
+		isBogota    = chainConfig.IsBogota(big.NewInt(int64(pre.Env.Number)), pre.Env.Timestamp)
 	)
 	if pre.AllocPath != "" {
 		var err error
@@ -368,6 +369,10 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 	}
 	blockAccessList.Merge(bal)
 
+	if isBogota {
+		statedb.IntermediateRoot(chainConfig.IsEIP158(vmContext.BlockNumber))
+		statedb.FillBlockAccessListStorageRoots(blockAccessList)
+	}
 	// Commit block
 	root, err := statedb.Commit(vmContext.BlockNumber.Uint64(), chainConfig.IsEIP158(vmContext.BlockNumber), chainConfig.IsCancun(vmContext.BlockNumber, vmContext.Time))
 	if err != nil {

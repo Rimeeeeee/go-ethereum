@@ -58,6 +58,7 @@ func makeTestConstructionBAL() *ConstructionBlockAccessList {
 				CodeChange: map[uint32][]byte{
 					0: common.Hex2Bytes("deadbeef"),
 				},
+				StorageRoot: NewStorageRoot(emptyStorageRootHash),
 			},
 			common.BytesToAddress([]byte{0xff, 0xff, 0xff}): {
 				StorageWrites: map[common.Hash]map[uint32]common.Hash{
@@ -82,6 +83,7 @@ func makeTestConstructionBAL() *ConstructionBlockAccessList {
 				CodeChange: map[uint32][]byte{
 					0: common.Hex2Bytes("deadbeef"),
 				},
+				StorageRoot: NewStorageRoot(common.HexToHash("0x1234")),
 			},
 		},
 	}
@@ -244,6 +246,7 @@ func makeTestAccountAccess(sort bool) AccountAccess {
 		BalanceChanges: balances,
 		NonceChanges:   nonces,
 		CodeChanges:    codes,
+		StorageRoot:    NewStorageRoot(common.HexToHash("0x1234")),
 	}
 }
 

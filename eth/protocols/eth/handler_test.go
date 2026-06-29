@@ -718,6 +718,7 @@ func makeTestBAL(t *testing.T, addr common.Address) rlp.RawValue {
 	cb := bal.NewConstructionBlockAccessList()
 	cb.AccountRead(addr)
 	cb.BalanceChange(0, addr, uint256.NewInt(1))
+	cb.SetStorageRoot(addr, types.EmptyRootHash)
 	var buf bytes.Buffer
 	if err := cb.EncodeRLP(&buf); err != nil {
 		t.Fatalf("failed to encode BAL: %v", err)

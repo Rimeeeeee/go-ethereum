@@ -34,6 +34,11 @@ import (
 // by RLP round-tripping (construction types use unexported encoding types).
 func buildTestBAL(t *testing.T, cb *bal.ConstructionBlockAccessList) *bal.BlockAccessList {
 	t.Helper()
+	for addr, account := range cb.Accounts {
+		if account.HasStateChanges() && account.StorageRoot == nil {
+			cb.SetStorageRoot(addr, types.EmptyRootHash)
+		}
+	}
 	var buf bytes.Buffer
 	if err := cb.EncodeRLP(&buf); err != nil {
 		t.Fatalf("failed to encode BAL: %v", err)

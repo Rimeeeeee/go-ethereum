@@ -41,6 +41,20 @@ import (
 	"github.com/holiman/uint256"
 )
 
+func encodeTestBAL(t *testing.T, cb *bal.ConstructionBlockAccessList) []byte {
+	t.Helper()
+	for addr, account := range cb.Accounts {
+		if account.HasStateChanges() && account.StorageRoot == nil {
+			cb.SetStorageRoot(addr, types.EmptyRootHash)
+		}
+	}
+	var buf bytes.Buffer
+	if err := cb.EncodeRLP(&buf); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
 type (
 	accountHandlerFuncV2  func(t *testPeerV2, requestId uint64, root common.Hash, origin common.Hash, limit common.Hash, cap int) error
 	storageHandlerFuncV2  func(t *testPeerV2, requestId uint64, root common.Hash, accounts []common.Hash, origin, limit []byte, max int) error
@@ -1613,14 +1627,11 @@ func testPivotMovement(t *testing.T, scheme string, pivotMoves int) {
 		// Build BAL matching the trie diff
 		cb := bal.NewConstructionBlockAccessList()
 		cb.BalanceChange(0, targetAddr, balance)
-		var buf bytes.Buffer
-		if err := cb.EncodeRLP(&buf); err != nil {
-			t.Fatal(err)
-		}
+		buf := encodeTestBAL(t, cb)
 
 		// Compute BAL hash, write header, store BAL keyed by header hash
 		var b bal.BlockAccessList
-		if err := rlp.DecodeBytes(buf.Bytes(), &b); err != nil {
+		if err := rlp.DecodeBytes(buf, &b); err != nil {
 			t.Fatal(err)
 		}
 		balHash := b.Hash()
@@ -1639,7 +1650,7 @@ func testPivotMovement(t *testing.T, scheme string, pivotMoves int) {
 			trie:     resultTrie,
 			elems:    newElems,
 			root:     newRoot,
-			bals:     map[common.Hash]rlp.RawValue{headerHash: buf.Bytes()},
+			bals:     map[common.Hash]rlp.RawValue{headerHash: buf},
 			balance:  balance,
 		}
 		currentElems = newElems
@@ -1755,12 +1766,9 @@ func testCatchUpPersistsIncrementally(t *testing.T, scheme string) {
 
 		cb := bal.NewConstructionBlockAccessList()
 		cb.BalanceChange(0, target, balance)
-		var buf bytes.Buffer
-		if err := cb.EncodeRLP(&buf); err != nil {
-			t.Fatal(err)
-		}
+		buf := encodeTestBAL(t, cb)
 		var b bal.BlockAccessList
-		if err := rlp.DecodeBytes(buf.Bytes(), &b); err != nil {
+		if err := rlp.DecodeBytes(buf, &b); err != nil {
 			t.Fatal(err)
 		}
 		balHash := b.Hash()
@@ -1773,7 +1781,7 @@ func testCatchUpPersistsIncrementally(t *testing.T, scheme string) {
 		}
 		rawdb.WriteHeader(db, header)
 		rawdb.WriteCanonicalHash(db, header.Hash(), blockNum)
-		blocks[i] = balBlock{header: header, bal: buf.Bytes()}
+		blocks[i] = balBlock{header: header, bal: buf}
 	}
 
 	// First sync: complete sync to A so persisted state has previousPivot=A,
@@ -2006,11 +2014,7 @@ func TestFetchAccessListsMultiplePeers(t *testing.T) {
 		hashes = append(hashes, h)
 		cb := bal.NewConstructionBlockAccessList()
 		cb.BalanceChange(0, common.HexToAddress("0xaa"), uint256.NewInt(uint64(i)))
-		var buf bytes.Buffer
-		if err := cb.EncodeRLP(&buf); err != nil {
-			t.Fatal(err)
-		}
-		bals[h] = buf.Bytes()
+		bals[h] = encodeTestBAL(t, cb)
 	}
 	mkSource := func(name string) *testPeerV2 {
 		source := newTestPeerV2(name, t, term)
@@ -2046,11 +2050,7 @@ func TestFetchAccessListsPeerTimeout(t *testing.T) {
 	bals := make(map[common.Hash]rlp.RawValue)
 	cb := bal.NewConstructionBlockAccessList()
 	cb.BalanceChange(0, common.HexToAddress("0xaa"), uint256.NewInt(42))
-	var buf bytes.Buffer
-	if err := cb.EncodeRLP(&buf); err != nil {
-		t.Fatal(err)
-	}
-	bals[hashes[0]] = buf.Bytes()
+	bals[hashes[0]] = encodeTestBAL(t, cb)
 
 	// First peer never responds
 	nonResponsive := newTestPeerV2("non-responsive", t, term)
@@ -2086,11 +2086,7 @@ func TestFetchAccessListsPeerRejection(t *testing.T) {
 	bals := make(map[common.Hash]rlp.RawValue)
 	cb := bal.NewConstructionBlockAccessList()
 	cb.BalanceChange(0, common.HexToAddress("0xaa"), uint256.NewInt(42))
-	var buf bytes.Buffer
-	if err := cb.EncodeRLP(&buf); err != nil {
-		t.Fatal(err)
-	}
-	bals[hashes[0]] = buf.Bytes()
+	bals[hashes[0]] = encodeTestBAL(t, cb)
 
 	// First peer rejects (has no BAL data, returns empty)
 	// accessLists is nil, so defaultAccessListRequestHandler returns empty
@@ -2147,11 +2143,7 @@ func TestFetchAccessListsPeerDrop(t *testing.T) {
 	bals := make(map[common.Hash]rlp.RawValue)
 	cb := bal.NewConstructionBlockAccessList()
 	cb.BalanceChange(0, common.HexToAddress("0xaa"), uint256.NewInt(42))
-	var buf bytes.Buffer
-	if err := cb.EncodeRLP(&buf); err != nil {
-		t.Fatal(err)
-	}
-	bals[hashes[0]] = buf.Bytes()
+	bals[hashes[0]] = encodeTestBAL(t, cb)
 
 	// First peer will be dropped mid-request
 	dropped := newTestPeerV2("dropped", t, term)
@@ -2196,11 +2188,7 @@ func TestFetchAccessListsShortResponse(t *testing.T) {
 	for _, h := range hashes {
 		cb := bal.NewConstructionBlockAccessList()
 		cb.BalanceChange(0, common.HexToAddress("0xaa"), uint256.NewInt(uint64(h[31])))
-		var buf bytes.Buffer
-		if err := cb.EncodeRLP(&buf); err != nil {
-			t.Fatal(err)
-		}
-		allBALs[h] = buf.Bytes()
+		allBALs[h] = encodeTestBAL(t, cb)
 	}
 
 	// shortPeer returns only the first 2 BALs regardless of how many are
@@ -2285,11 +2273,7 @@ func TestFetchAccessListsEmptyPlaceholder(t *testing.T) {
 	for _, h := range hashes {
 		cb := bal.NewConstructionBlockAccessList()
 		cb.BalanceChange(0, common.HexToAddress("0xaa"), uint256.NewInt(uint64(h[31])))
-		var buf bytes.Buffer
-		if err := cb.EncodeRLP(&buf); err != nil {
-			t.Fatal(err)
-		}
-		allBALs[h] = buf.Bytes()
+		allBALs[h] = encodeTestBAL(t, cb)
 	}
 
 	// partialPeer has BALs for hashes 0 and 2. The server
@@ -2366,11 +2350,7 @@ func TestFetchAccessListsRejectsBadBAL(t *testing.T) {
 	// Build a BAL we'll actually serve.
 	cb := bal.NewConstructionBlockAccessList()
 	cb.BalanceChange(0, common.HexToAddress("0xaa"), uint256.NewInt(42))
-	var buf bytes.Buffer
-	if err := cb.EncodeRLP(&buf); err != nil {
-		t.Fatal(err)
-	}
-	served := buf.Bytes()
+	served := encodeTestBAL(t, cb)
 
 	// Build a header whose BlockAccessListHash points at something else, so
 	// the served BAL fails verification.
@@ -2413,21 +2393,13 @@ func TestCatchUpRetriesOnBadBAL(t *testing.T) {
 
 	cb := bal.NewConstructionBlockAccessList()
 	cb.BalanceChange(0, common.HexToAddress("0xaa"), uint256.NewInt(42))
-	var buf bytes.Buffer
-	if err := cb.EncodeRLP(&buf); err != nil {
-		t.Fatal(err)
-	}
-	good := buf.Bytes()
+	good := encodeTestBAL(t, cb)
 
 	// A second BAL with different content used as the "bad" payload. It
 	// decodes cleanly but its hash will not match the header.
 	other := bal.NewConstructionBlockAccessList()
 	other.BalanceChange(0, common.HexToAddress("0xbb"), uint256.NewInt(99))
-	var otherBuf bytes.Buffer
-	if err := other.EncodeRLP(&otherBuf); err != nil {
-		t.Fatal(err)
-	}
-	bad := otherBuf.Bytes()
+	bad := encodeTestBAL(t, other)
 
 	headers := makeAccessListHeaders(map[common.Hash]rlp.RawValue{hash: good})
 
@@ -2594,7 +2566,7 @@ func testCatchUpAppliesStorageBALs(t *testing.T, scheme string) {
 	// Build the state at pivot A (served by the seed peer) and the expected
 	// state at pivot A+1 (only its root is needed).
 	accTrieA, accElemsA, stTrieA, stElemsA, rootA := makeStateWithStorageContract(scheme, plain, contractAddr, contractTmpl, slotsA)
-	_, _, _, _, rootB := makeStateWithStorageContract(scheme, plain, contractAddr, contractTmpl, slotsB)
+	_, _, stTrieB, _, rootB := makeStateWithStorageContract(scheme, plain, contractAddr, contractTmpl, slotsB)
 	if rootA == rootB {
 		t.Fatal("test bug: pivot A and A+1 must have different state roots")
 	}
@@ -2606,6 +2578,7 @@ func testCatchUpAppliesStorageBALs(t *testing.T, scheme string) {
 	cb.StorageWrite(0, contractAddr, slotNew, vNew)            // new non-zero
 	cb.StorageWrite(0, contractAddr, slotMultiTx, vMultiMid)   // tx 0
 	cb.StorageWrite(2, contractAddr, slotMultiTx, vMultiFinal) // tx 2 (post-block)
+	cb.SetStorageRoot(contractAddr, stTrieB.Hash())
 	var balBuf bytes.Buffer
 	if err := cb.EncodeRLP(&balBuf); err != nil {
 		t.Fatal(err)

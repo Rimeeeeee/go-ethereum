@@ -2,6 +2,7 @@
 
 package bal
 
+import "fmt"
 import "github.com/ethereum/go-ethereum/common"
 import "github.com/ethereum/go-ethereum/rlp"
 import "github.com/holiman/uint256"
@@ -71,6 +72,16 @@ func (obj *AccountAccess) EncodeRLP(_w io.Writer) error {
 		w.ListEnd(_tmp17)
 	}
 	w.ListEnd(_tmp15)
+	if obj.hasStateChanges() {
+		if obj.StorageRoot == nil {
+			return fmt.Errorf("state-changing account %x missing storage root", obj.Address)
+		}
+		if obj.StorageRoot.Empty {
+			w.Write(rlp.EmptyString)
+		} else {
+			w.WriteBytes(obj.StorageRoot.Root[:])
+		}
+	}
 	w.ListEnd(_tmp0)
 	return w.Flush()
 }
@@ -262,6 +273,20 @@ func (obj *AccountAccess) DecodeRLP(dec *rlp.Stream) error {
 			return err
 		}
 		_tmp0.CodeChanges = _tmp19
+		if dec.MoreDataInList() {
+			_tmp23, err := dec.Bytes()
+			if err != nil {
+				return err
+			}
+			switch len(_tmp23) {
+			case 0:
+				_tmp0.StorageRoot = &StorageRoot{Root: emptyStorageRootHash, Empty: true}
+			case common.HashLength:
+				_tmp0.StorageRoot = &StorageRoot{Root: common.BytesToHash(_tmp23)}
+			default:
+				return fmt.Errorf("invalid storage root length %d", len(_tmp23))
+			}
+		}
 		if err := dec.ListEnd(); err != nil {
 			return err
 		}

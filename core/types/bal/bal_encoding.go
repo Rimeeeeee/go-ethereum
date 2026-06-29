@@ -19,6 +19,7 @@ package bal
 import (
 	"bytes"
 	"cmp"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -227,6 +228,52 @@ type encodingCodeChangeMarshaling struct {
 	NewCode          hexutil.Bytes
 }
 
+var emptyStorageRootHash = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+
+// StorageRoot is the EIP-8268 post-block account storage root carried by
+// state-changing BAL entries. Empty post-block storage is encoded as the RLP
+// empty string, while non-empty storage is encoded as its 32-byte trie root.
+type StorageRoot struct {
+	Root  common.Hash
+	Empty bool
+}
+
+func NewStorageRoot(root common.Hash) *StorageRoot {
+	return &StorageRoot{Root: root, Empty: root == emptyStorageRootHash}
+}
+
+func (r *StorageRoot) Copy() *StorageRoot {
+	if r == nil {
+		return nil
+	}
+	return &StorageRoot{Root: r.Root, Empty: r.Empty}
+}
+
+func (r StorageRoot) MarshalJSON() ([]byte, error) {
+	if r.Empty {
+		return json.Marshal(hexutil.Bytes{})
+	}
+	return json.Marshal(r.Root)
+}
+
+func (r *StorageRoot) UnmarshalJSON(input []byte) error {
+	var data hexutil.Bytes
+	if err := json.Unmarshal(input, &data); err != nil {
+		return err
+	}
+	switch len(data) {
+	case 0:
+		r.Root = emptyStorageRootHash
+		r.Empty = true
+	case common.HashLength:
+		r.Root = common.BytesToHash(data)
+		r.Empty = false
+	default:
+		return fmt.Errorf("invalid storage root length %d", len(data))
+	}
+	return nil
+}
+
 // AccountAccess is the encoding format of ConstructionAccountAccess.
 type AccountAccess struct {
 	Address        common.Address          `json:"address"`
@@ -235,6 +282,7 @@ type AccountAccess struct {
 	BalanceChanges []encodingBalanceChange `json:"balanceChanges"`
 	NonceChanges   []encodingAccountNonce  `json:"nonceChanges"`
 	CodeChanges    []encodingCodeChange    `json:"codeChanges"`
+	StorageRoot    *StorageRoot            `json:"storageRoot,omitempty"`
 }
 
 type accountAccessMarshaling struct {
@@ -326,7 +374,19 @@ func (e *AccountAccess) validate(maxBALIndex int) error {
 			return errors.New("code change contained oversized code")
 		}
 	}
+	if e.hasStateChanges() {
+		if e.StorageRoot == nil {
+			return errors.New("state-changing account missing storage root")
+		}
+	} else if e.StorageRoot != nil {
+		return errors.New("access-only account must not contain storage root")
+	}
 	return nil
+}
+
+func (e *AccountAccess) hasStateChanges() bool {
+	return len(e.StorageChanges) > 0 || len(e.BalanceChanges) > 0 ||
+		len(e.NonceChanges) > 0 || len(e.CodeChanges) > 0
 }
 
 // Copy returns a deep copy of the account access
@@ -338,6 +398,7 @@ func (e *AccountAccess) Copy() AccountAccess {
 		NonceChanges:   slices.Clone(e.NonceChanges),
 		StorageChanges: make([]encodingSlotChanges, 0, len(e.StorageChanges)),
 		CodeChanges:    make([]encodingCodeChange, 0, len(e.CodeChanges)),
+		StorageRoot:    e.StorageRoot.Copy(),
 	}
 	for _, slot := range e.StorageReads {
 		res.StorageReads = append(res.StorageReads, slot.Clone())
@@ -451,6 +512,9 @@ func (a *ConstructionAccountAccess) toEncodingObj(addr common.Address) AccountAc
 			// AccessList is unsafe for modification.
 			NewCode: a.CodeChange[idx],
 		})
+	}
+	if a.StorageRoot != nil {
+		res.StorageRoot = a.StorageRoot.Copy()
 	}
 	return res
 }
