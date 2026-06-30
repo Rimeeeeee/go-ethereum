@@ -73,10 +73,14 @@ func (obj *AccountAccess) EncodeRLP(_w io.Writer) error {
 	w.ListEnd(_tmp15)
 	_tmp18 := obj.StorageRoot != nil
 	if _tmp18 {
-		_tmp19 := w.List()
-		w.WriteBytes(obj.StorageRoot.Root[:])
-		w.WriteBool(obj.StorageRoot.Empty)
-		w.ListEnd(_tmp19)
+		if obj.StorageRoot == nil {
+			w.Write([]byte{0xC0})
+		} else {
+			_tmp19 := w.List()
+			w.WriteBytes(obj.StorageRoot.Root[:])
+			w.WriteBool(obj.StorageRoot.Empty)
+			w.ListEnd(_tmp19)
+		}
 	}
 	w.ListEnd(_tmp0)
 	return w.Flush()

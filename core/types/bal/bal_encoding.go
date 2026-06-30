@@ -332,6 +332,7 @@ type AccountAccess struct {
 
 type accountAccessMarshaling struct {
 	StorageReads []*hexutil.U256
+	StorageRoot  *StorageRoot `json:"storageRoot,omitempty"`
 }
 
 // validate converts the account accesses out of encoding format.
