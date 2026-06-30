@@ -137,6 +137,45 @@ func TestBALStorageRootForkGating(t *testing.T) {
 	}
 }
 
+func TestBALStorageRootForkGatedDecode(t *testing.T) {
+	withRoots := makeTestConstructionBAL().ToEncodingObj()
+
+	var legacyBuf bytes.Buffer
+	if err := withRoots.encodeRLPWithoutStorageRoots(&legacyBuf); err != nil {
+		t.Fatalf("encoding legacy BAL failed: %v", err)
+	}
+	var legacy BlockAccessList
+	if err := legacy.DecodeRLP(rlp.NewStream(bytes.NewReader(legacyBuf.Bytes()), 0)); err != nil {
+		t.Fatalf("decoding legacy BAL failed: %v", err)
+	}
+	if err := legacy.ValidateWithStorageRoots(math.MaxUint64, 10000, false); err != nil {
+		t.Fatalf("legacy BAL validation failed: %v", err)
+	}
+	if err := legacy.ValidateWithStorageRoots(math.MaxUint64, 10000, true); err == nil {
+		t.Fatal("bogota validation accepted decoded legacy BAL")
+	}
+	for _, account := range legacy {
+		if account.StorageRoot != nil {
+			t.Fatal("decoded legacy BAL should not contain storage roots")
+		}
+	}
+
+	var bogotaBuf bytes.Buffer
+	if err := withRoots.EncodeRLP(&bogotaBuf); err != nil {
+		t.Fatalf("encoding bogota BAL failed: %v", err)
+	}
+	var bogota BlockAccessList
+	if err := bogota.DecodeRLP(rlp.NewStream(bytes.NewReader(bogotaBuf.Bytes()), 0)); err != nil {
+		t.Fatalf("decoding bogota BAL failed: %v", err)
+	}
+	if err := bogota.ValidateWithStorageRoots(math.MaxUint64, 10000, true); err != nil {
+		t.Fatalf("bogota BAL validation failed: %v", err)
+	}
+	if err := bogota.ValidateWithStorageRoots(math.MaxUint64, 10000, false); err == nil {
+		t.Fatal("pre-bogota validation accepted decoded storage roots")
+	}
+}
+
 func TestConstructionBALMerge(t *testing.T) {
 	var (
 		addrA = common.BytesToAddress([]byte{0xAA})

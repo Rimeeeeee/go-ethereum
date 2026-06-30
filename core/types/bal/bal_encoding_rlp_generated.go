@@ -71,13 +71,12 @@ func (obj *AccountAccess) EncodeRLP(_w io.Writer) error {
 		w.ListEnd(_tmp17)
 	}
 	w.ListEnd(_tmp15)
-	if obj.StorageRoot == nil {
-		w.Write([]byte{0xC0})
-	} else {
-		_tmp18 := w.List()
+	_tmp18 := obj.StorageRoot != nil
+	if _tmp18 {
+		_tmp19 := w.List()
 		w.WriteBytes(obj.StorageRoot.Root[:])
 		w.WriteBool(obj.StorageRoot.Empty)
-		w.ListEnd(_tmp18)
+		w.ListEnd(_tmp19)
 	}
 	w.ListEnd(_tmp0)
 	return w.Flush()
@@ -271,28 +270,30 @@ func (obj *AccountAccess) DecodeRLP(dec *rlp.Stream) error {
 		}
 		_tmp0.CodeChanges = _tmp19
 		// StorageRoot:
-		var _tmp23 StorageRoot
-		{
-			if _, err := dec.List(); err != nil {
-				return err
+		if dec.MoreDataInList() {
+			var _tmp23 StorageRoot
+			{
+				if _, err := dec.List(); err != nil {
+					return err
+				}
+				// Root:
+				var _tmp24 common.Hash
+				if err := dec.ReadBytes(_tmp24[:]); err != nil {
+					return err
+				}
+				_tmp23.Root = _tmp24
+				// Empty:
+				_tmp25, err := dec.Bool()
+				if err != nil {
+					return err
+				}
+				_tmp23.Empty = _tmp25
+				if err := dec.ListEnd(); err != nil {
+					return err
+				}
 			}
-			// Root:
-			var _tmp24 common.Hash
-			if err := dec.ReadBytes(_tmp24[:]); err != nil {
-				return err
-			}
-			_tmp23.Root = _tmp24
-			// Empty:
-			_tmp25, err := dec.Bool()
-			if err != nil {
-				return err
-			}
-			_tmp23.Empty = _tmp25
-			if err := dec.ListEnd(); err != nil {
-				return err
-			}
+			_tmp0.StorageRoot = &_tmp23
 		}
-		_tmp0.StorageRoot = &_tmp23
 		if err := dec.ListEnd(); err != nil {
 			return err
 		}

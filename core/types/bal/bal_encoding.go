@@ -327,7 +327,7 @@ type AccountAccess struct {
 	BalanceChanges []encodingBalanceChange `json:"balanceChanges"`
 	NonceChanges   []encodingAccountNonce  `json:"nonceChanges"`
 	CodeChanges    []encodingCodeChange    `json:"codeChanges"`
-	StorageRoot    *StorageRoot            `json:"storageRoot,omitempty"`
+	StorageRoot    *StorageRoot            `json:"storageRoot,omitempty" rlp:"optional"`
 }
 
 type accountAccessMarshaling struct {
@@ -447,7 +447,9 @@ func (e *AccountAccess) Copy() AccountAccess {
 		NonceChanges:   slices.Clone(e.NonceChanges),
 		StorageChanges: make([]encodingSlotChanges, 0, len(e.StorageChanges)),
 		CodeChanges:    make([]encodingCodeChange, 0, len(e.CodeChanges)),
-		StorageRoot:    e.StorageRoot.Copy(),
+	}
+	if e.StorageRoot != nil {
+		res.StorageRoot = e.StorageRoot.Copy()
 	}
 	for _, slot := range e.StorageReads {
 		res.StorageReads = append(res.StorageReads, slot.Clone())
