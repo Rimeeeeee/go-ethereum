@@ -48,7 +48,7 @@ func (a *AccountAccess) UnmarshalJSON(input []byte) error {
 		BalanceChanges []encodingBalanceChange `json:"balanceChanges"`
 		NonceChanges   []encodingAccountNonce  `json:"nonceChanges"`
 		CodeChanges    []encodingCodeChange    `json:"codeChanges"`
-		StorageRoot    *StorageRoot            `json:"storageRoot"`
+		StorageRoot    *StorageRoot            `json:"storageRoot,omitempty"`
 	}
 	var dec AccountAccess
 	if err := json.Unmarshal(input, &dec); err != nil {
