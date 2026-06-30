@@ -123,10 +123,11 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 		//
 		// If the block includes an attached access list, validate it directly here.
 		if block.AccessList() != nil {
-			computed := block.AccessList().Hash()
+			storageRoots := v.config.IsBogota(block.Number(), block.Time())
+			computed := block.AccessList().HashWithStorageRoots(storageRoots)
 			if *block.Header().BlockAccessListHash != computed {
 				return fmt.Errorf("access list hash mismatch, computed: %x, remote: %x", computed, *block.Header().BlockAccessListHash)
-			} else if err := block.AccessList().Validate(block.GasLimit(), len(block.Transactions())); err != nil {
+			} else if err := block.AccessList().ValidateWithStorageRoots(block.GasLimit(), len(block.Transactions()), storageRoots); err != nil {
 				return fmt.Errorf("invalid block access list: %v", err)
 			}
 		}
@@ -198,15 +199,16 @@ func (v *BlockValidator) ValidateState(block *types.Block, state StateRootSource
 		if block.Header().BlockAccessListHash == nil {
 			return errors.New("block access list hash not set in header")
 		}
-		if v.config.IsBogota(block.Number(), block.Time()) {
+		storageRoots := v.config.IsBogota(block.Number(), block.Time())
+		if storageRoots {
 			state.FillBlockAccessListStorageRoots(res.Bal)
 		}
 		enc := res.Bal.ToEncodingObj()
-		local, remote := enc.Hash(), *block.Header().BlockAccessListHash
+		local, remote := enc.HashWithStorageRoots(storageRoots), *block.Header().BlockAccessListHash
 		if local != remote {
 			return fmt.Errorf("access list hash mismatch, local: %x, remote: %x", local, remote)
 		}
-		if err := enc.Validate(block.GasLimit(), len(block.Transactions())); err != nil {
+		if err := enc.ValidateWithStorageRoots(block.GasLimit(), len(block.Transactions()), storageRoots); err != nil {
 			return fmt.Errorf("invalid block access list: %v", err)
 		}
 	}

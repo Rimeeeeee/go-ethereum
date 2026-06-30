@@ -196,10 +196,11 @@ func (p *ParallelStateProcessor) resultHandler(block *types.Block, preTxBAL *bal
 	case rootCalcRes.err != nil:
 		resCh <- errResult(rootCalcRes.err)
 	default:
-		if p.chainConfig().IsBogota(block.Number(), block.Time()) {
+		storageRoots := p.chainConfig().IsBogota(block.Number(), block.Time())
+		if storageRoots {
 			rootCalcRes.transition.FillBlockAccessListStorageRoots(execResults.ProcessResult.Bal)
 		}
-		if block.AccessList().Hash() != execResults.ProcessResult.Bal.ToEncodingObj().Hash() {
+		if block.AccessList().HashWithStorageRoots(storageRoots) != execResults.ProcessResult.Bal.ToEncodingObj().HashWithStorageRoots(storageRoots) {
 			resCh <- errResult(fmt.Errorf("invalid block access list: mismatch between local and remote block access list"))
 			return
 		}

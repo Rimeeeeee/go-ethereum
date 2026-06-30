@@ -81,13 +81,21 @@ func (e *BlockAccessList) DecodeRLP(s *rlp.Stream) error {
 // according to the spec or any code changes are contained which exceed protocol
 // max code size.
 func (e *BlockAccessList) Validate(blockGasLimit uint64, blockTxCount int) error {
+	return e.ValidateWithStorageRoots(blockGasLimit, blockTxCount, true)
+}
+
+// ValidateWithStorageRoots returns an error if the contents of the access list
+// are not ordered according to the spec or any code changes are contained which
+// exceed protocol max code size. When storageRoots is false, the pre-Bogota BAL
+// encoding rules are enforced and storage roots are rejected.
+func (e *BlockAccessList) ValidateWithStorageRoots(blockGasLimit uint64, blockTxCount int, storageRoots bool) error {
 	if !slices.IsSortedFunc(*e, func(a, b AccountAccess) int {
 		return bytes.Compare(a.Address[:], b.Address[:])
 	}) {
 		return errors.New("block access list accounts not in lexicographic order")
 	}
 	for _, entry := range *e {
-		if err := entry.validate(blockTxCount + 1); err != nil {
+		if err := entry.validate(blockTxCount+1, storageRoots); err != nil {
 			return err
 		}
 	}
@@ -122,14 +130,51 @@ func (e *BlockAccessList) ValidateSize(blockGasLimit uint64) error {
 
 // Hash computes the keccak256 hash of the access list
 func (e *BlockAccessList) Hash() common.Hash {
+	return e.HashWithStorageRoots(true)
+}
+
+// HashWithStorageRoots computes the keccak256 hash of the access list. Bogota
+// and later encode storage roots; Amsterdam uses the original BAL encoding
+// without the storage-root field.
+func (e *BlockAccessList) HashWithStorageRoots(storageRoots bool) common.Hash {
 	var enc bytes.Buffer
-	if err := e.EncodeRLP(&enc); err != nil {
+	var err error
+	if storageRoots {
+		err = e.EncodeRLP(&enc)
+	} else {
+		err = e.encodeRLPWithoutStorageRoots(&enc)
+	}
+	if err != nil {
 		// Errors here are related to BAL values exceeding maximum size defined
 		// by the spec. Return empty hash because these cases are not expected
 		// to be hit under reasonable conditions.
 		return common.Hash{}
 	}
 	return crypto.Keccak256Hash(enc.Bytes())
+}
+
+type accountAccessWithoutStorageRoot struct {
+	Address        common.Address
+	StorageChanges []encodingSlotChanges
+	StorageReads   []*uint256.Int
+	BalanceChanges []encodingBalanceChange
+	NonceChanges   []encodingAccountNonce
+	CodeChanges    []encodingCodeChange
+}
+
+func (e *BlockAccessList) encodeRLPWithoutStorageRoots(w io.Writer) error {
+	list := make([]accountAccessWithoutStorageRoot, 0, len(*e))
+	for _, entry := range *e {
+		list = append(list, accountAccessWithoutStorageRoot{
+			Address:        entry.Address,
+			StorageChanges: entry.StorageChanges,
+			StorageReads:   entry.StorageReads,
+			BalanceChanges: entry.BalanceChanges,
+			NonceChanges:   entry.NonceChanges,
+			CodeChanges:    entry.CodeChanges,
+		})
+	}
+	return rlp.Encode(w, list)
 }
 
 // EIP-7928 encoding types. Field names and JSON keys mirror the
@@ -292,7 +337,7 @@ type accountAccessMarshaling struct {
 // validate converts the account accesses out of encoding format.
 // If any of the keys in the encoding object are not ordered according to the
 // spec, an error is returned.
-func (e *AccountAccess) validate(maxBALIndex int) error {
+func (e *AccountAccess) validate(maxBALIndex int, storageRoots bool) error {
 	// Check the storage writes are sorted in order, and unique by slot
 	if !isStrictlySortedFunc(e.StorageChanges, func(a, b encodingSlotChanges) int {
 		return a.Slot.Cmp(b.Slot)
@@ -374,12 +419,16 @@ func (e *AccountAccess) validate(maxBALIndex int) error {
 			return errors.New("code change contained oversized code")
 		}
 	}
-	if e.hasStateChanges() {
-		if e.StorageRoot == nil {
-			return errors.New("state-changing account missing storage root")
+	if storageRoots {
+		if e.hasStateChanges() {
+			if e.StorageRoot == nil {
+				return errors.New("state-changing account missing storage root")
+			}
+		} else if e.StorageRoot != nil {
+			return errors.New("access-only account must not contain storage root")
 		}
 	} else if e.StorageRoot != nil {
-		return errors.New("access-only account must not contain storage root")
+		return errors.New("account must not contain storage root before bogota")
 	}
 	return nil
 }

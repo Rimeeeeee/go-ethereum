@@ -109,6 +109,34 @@ func TestBALEncoding(t *testing.T) {
 	}
 }
 
+func TestBALStorageRootForkGating(t *testing.T) {
+	withRoots := makeTestConstructionBAL().ToEncodingObj()
+	if err := withRoots.ValidateWithStorageRoots(math.MaxUint64, 10000, true); err != nil {
+		t.Fatalf("bogota validation failed: %v", err)
+	}
+	if err := withRoots.ValidateWithStorageRoots(math.MaxUint64, 10000, false); err == nil {
+		t.Fatal("pre-bogota validation accepted storage roots")
+	}
+
+	withoutRoots := withRoots.Copy()
+	for i := range *withoutRoots {
+		(*withoutRoots)[i].StorageRoot = nil
+	}
+	if err := withoutRoots.ValidateWithStorageRoots(math.MaxUint64, 10000, false); err != nil {
+		t.Fatalf("pre-bogota validation failed: %v", err)
+	}
+	if err := withoutRoots.ValidateWithStorageRoots(math.MaxUint64, 10000, true); err == nil {
+		t.Fatal("bogota validation accepted state changes without storage roots")
+	}
+
+	if withRoots.HashWithStorageRoots(false) != withoutRoots.HashWithStorageRoots(false) {
+		t.Fatal("pre-bogota hash must not depend on storage roots")
+	}
+	if withRoots.HashWithStorageRoots(true) == withoutRoots.HashWithStorageRoots(false) {
+		t.Fatal("bogota and pre-bogota encodings should produce distinct hashes")
+	}
+}
+
 func TestConstructionBALMerge(t *testing.T) {
 	var (
 		addrA = common.BytesToAddress([]byte{0xAA})
