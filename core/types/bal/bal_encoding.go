@@ -301,6 +301,41 @@ func (r StorageRoot) MarshalJSON() ([]byte, error) {
 	return json.Marshal(r.Root)
 }
 
+func (r StorageRoot) EncodeRLP(w io.Writer) error {
+	enc := rlp.NewEncoderBuffer(w)
+	if r.Empty {
+		enc.Write(rlp.EmptyString)
+	} else {
+		enc.WriteBytes(r.Root[:])
+	}
+	return enc.Flush()
+}
+
+func (r *StorageRoot) DecodeRLP(s *rlp.Stream) error {
+	kind, _, err := s.Kind()
+	if err != nil {
+		return err
+	}
+	if kind == rlp.List {
+		return errors.New("storage root must be an RLP string")
+	}
+	data, err := s.Bytes()
+	if err != nil {
+		return err
+	}
+	switch len(data) {
+	case 0:
+		r.Root = emptyStorageRootHash
+		r.Empty = true
+	case common.HashLength:
+		r.Root = common.BytesToHash(data)
+		r.Empty = r.Root == emptyStorageRootHash
+	default:
+		return fmt.Errorf("invalid storage root RLP string length %d", len(data))
+	}
+	return nil
+}
+
 func (r *StorageRoot) UnmarshalJSON(input []byte) error {
 	var data hexutil.Bytes
 	if err := json.Unmarshal(input, &data); err != nil {
@@ -312,7 +347,7 @@ func (r *StorageRoot) UnmarshalJSON(input []byte) error {
 		r.Empty = true
 	case common.HashLength:
 		r.Root = common.BytesToHash(data)
-		r.Empty = false
+		r.Empty = r.Root == emptyStorageRootHash
 	default:
 		return fmt.Errorf("invalid storage root length %d", len(data))
 	}

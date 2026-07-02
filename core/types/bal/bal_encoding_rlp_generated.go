@@ -2,10 +2,13 @@
 
 package bal
 
-import "github.com/ethereum/go-ethereum/common"
-import "github.com/ethereum/go-ethereum/rlp"
-import "github.com/holiman/uint256"
-import "io"
+import (
+	"io"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/holiman/uint256"
+)
 
 func (obj *AccountAccess) EncodeRLP(_w io.Writer) error {
 	w := rlp.NewEncoderBuffer(_w)
@@ -73,13 +76,8 @@ func (obj *AccountAccess) EncodeRLP(_w io.Writer) error {
 	w.ListEnd(_tmp15)
 	_tmp18 := obj.StorageRoot != nil
 	if _tmp18 {
-		if obj.StorageRoot == nil {
-			w.Write([]byte{0xC0})
-		} else {
-			_tmp19 := w.List()
-			w.WriteBytes(obj.StorageRoot.Root[:])
-			w.WriteBool(obj.StorageRoot.Empty)
-			w.ListEnd(_tmp19)
+		if err := obj.StorageRoot.EncodeRLP(w); err != nil {
+			return err
 		}
 	}
 	w.ListEnd(_tmp0)
@@ -275,28 +273,11 @@ func (obj *AccountAccess) DecodeRLP(dec *rlp.Stream) error {
 		_tmp0.CodeChanges = _tmp19
 		// StorageRoot:
 		if dec.MoreDataInList() {
-			var _tmp23 StorageRoot
-			{
-				if _, err := dec.List(); err != nil {
-					return err
-				}
-				// Root:
-				var _tmp24 common.Hash
-				if err := dec.ReadBytes(_tmp24[:]); err != nil {
-					return err
-				}
-				_tmp23.Root = _tmp24
-				// Empty:
-				_tmp25, err := dec.Bool()
-				if err != nil {
-					return err
-				}
-				_tmp23.Empty = _tmp25
-				if err := dec.ListEnd(); err != nil {
-					return err
-				}
+			_tmp23 := new(StorageRoot)
+			if err := _tmp23.DecodeRLP(dec); err != nil {
+				return err
 			}
-			_tmp0.StorageRoot = &_tmp23
+			_tmp0.StorageRoot = _tmp23
 		}
 		if err := dec.ListEnd(); err != nil {
 			return err

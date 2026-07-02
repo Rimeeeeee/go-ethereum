@@ -1,5 +1,8 @@
 **/*_test.go
 
 build/_workspace
-build/_bin
+build/bin
+build/cache
+tests/spec-tests
+tests/spec-tests-bal
 tests/testdata
