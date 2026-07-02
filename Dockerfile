@@ -15,6 +15,7 @@ RUN cd /go-ethereum && go mod download
 
 ADD . /go-ethereum
 RUN cd /go-ethereum && go run build/ci.go install -static ./cmd/geth
+RUN test -s /go-ethereum/build/bin/geth
 
 # Pull Geth into a second stage deploy alpine container
 FROM alpine:latest

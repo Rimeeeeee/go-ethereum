@@ -272,9 +272,14 @@ func extractFile(arpath string, armode os.FileMode, data io.Reader, dest string)
 		return fmt.Errorf("path %q escapes archive destination", target)
 	}
 
-	// Remove the previously-extracted file if it exists
+	// Remove the previously-extracted file if it exists.
+	// On Windows, cached binaries can be writable but not deletable depending
+	// on ACL inheritance. In that case, allow overwriting regular files below.
 	if err := os.RemoveAll(target); err != nil {
-		return err
+		info, statErr := os.Stat(target)
+		if statErr != nil || info.IsDir() {
+			return err
+		}
 	}
 
 	// Recreate the destination directory
@@ -283,7 +288,7 @@ func extractFile(arpath string, armode os.FileMode, data io.Reader, dest string)
 	}
 
 	// Copy file data.
-	file, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY, armode)
+	file, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, armode)
 	if err != nil {
 		return err
 	}
@@ -292,5 +297,8 @@ func extractFile(arpath string, armode os.FileMode, data io.Reader, dest string)
 		os.Remove(target)
 		return err
 	}
-	return file.Close()
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return os.Chmod(target, armode)
 }

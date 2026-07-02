@@ -19,7 +19,6 @@ package ethconfig
 
 import (
 	"errors"
-	"github.com/ethereum/go-ethereum/core/types/bal"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -31,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/history"
 	"github.com/ethereum/go-ethereum/core/txpool/blobpool"
 	"github.com/ethereum/go-ethereum/core/txpool/legacypool"
+	"github.com/ethereum/go-ethereum/core/types/bal"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"

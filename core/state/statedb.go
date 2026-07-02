@@ -1102,6 +1102,29 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	return hash
 }
 
+// FillBlockAccessListStorageRoots annotates state-changing BAL entries with
+// their post-block storage roots. It must be called after IntermediateRoot so
+// storage trie roots have been recalculated.
+func (s *StateDB) FillBlockAccessListStorageRoots(blockAccessList *bal.ConstructionBlockAccessList) {
+	if blockAccessList == nil {
+		return
+	}
+	for addr, acc := range blockAccessList.Accounts {
+		if !acc.HasStateChanges() {
+			continue
+		}
+		root := types.EmptyRootHash
+		if op := s.mutations[addr]; op != nil && op.isDelete() {
+			blockAccessList.SetStorageRoot(addr, root)
+			continue
+		}
+		if obj := s.stateObjects[addr]; obj != nil {
+			root = obj.Root()
+		}
+		blockAccessList.SetStorageRoot(addr, root)
+	}
+}
+
 // SetTxContext sets the current transaction hash and index which are
 // used when the EVM emits new state logs. It should be invoked before
 // transaction execution.

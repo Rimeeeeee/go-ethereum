@@ -117,12 +117,6 @@ func (p *ParallelStateProcessor) prepareExecResult(block *types.Block, tExecStar
 		blockAccessList.Merge(res.blockAccessList)
 	}
 
-	// TODO: do we move validation to ValidateState?
-	if block.AccessList().Hash() != blockAccessList.ToEncodingObj().Hash() {
-		// TODO: expose json string method on encoding block access list and log it here
-		return errResult(fmt.Errorf("invalid block access list: mismatch between local and remote block access list"))
-	}
-
 	tPostprocess := time.Since(tPostprocessStart)
 
 	return &ProcessResultWithMetrics{
@@ -202,14 +196,23 @@ func (p *ParallelStateProcessor) resultHandler(block *types.Block, preTxBAL *bal
 	case rootCalcRes.err != nil:
 		resCh <- errResult(rootCalcRes.err)
 	default:
+		storageRoots := p.chainConfig().IsBogota(block.Number(), block.Time())
+		if storageRoots {
+			rootCalcRes.transition.FillBlockAccessListStorageRoots(execResults.ProcessResult.Bal)
+		}
+		if block.AccessList().HashWithStorageRoots(storageRoots) != execResults.ProcessResult.Bal.ToEncodingObj().HashWithStorageRoots(storageRoots) {
+			resCh <- errResult(fmt.Errorf("invalid block access list: mismatch between local and remote block access list"))
+			return
+		}
 		execResults.StateTransitionMetrics = rootCalcRes.metrics
 		resCh <- execResults
 	}
 }
 
 type stateRootCalculationResult struct {
-	err     error
-	metrics *state.BALStateTransitionMetrics
+	err        error
+	metrics    *state.BALStateTransitionMetrics
+	transition *state.BALStateTransition
 }
 
 // calcAndVerifyRoot performs the post-state root hash calculation, verifying
@@ -218,7 +221,8 @@ func (p *ParallelStateProcessor) calcAndVerifyRoot(block *types.Block, stateTran
 	root := stateTransition.IntermediateRoot(false)
 
 	res := stateRootCalculationResult{
-		metrics: stateTransition.Metrics(),
+		metrics:    stateTransition.Metrics(),
+		transition: stateTransition,
 	}
 	if root != block.Root() {
 		res.err = fmt.Errorf("state root mismatch. local: %x. remote: %x", root, block.Root())

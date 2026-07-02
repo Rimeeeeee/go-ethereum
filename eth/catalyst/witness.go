@@ -182,8 +182,8 @@ func (api *ConsensusAPI) NewPayloadWithWitnessV5(ctx context.Context, params eng
 		return invalidStatus, paramsErr("nil block access list post-amsterdam")
 	case params.SlotNumber == nil:
 		return invalidStatus, paramsErr("nil slotnumber post-amsterdam")
-	case !api.checkFork(params.Timestamp, forks.Amsterdam):
-		return invalidStatus, unsupportedForkErr("newPayloadV5 must only be called for amsterdam payloads")
+	case !api.checkFork(params.Timestamp, forks.Amsterdam, forks.Bogota):
+		return invalidStatus, unsupportedForkErr("newPayloadV5 must only be called for amsterdam/bogota payloads")
 	}
 	requests := convertRequests(executionRequests)
 	if err := validateRequests(requests); err != nil {

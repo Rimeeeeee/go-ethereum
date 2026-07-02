@@ -58,6 +58,7 @@ func makeTestConstructionBAL() *ConstructionBlockAccessList {
 				CodeChange: map[uint32][]byte{
 					0: common.Hex2Bytes("deadbeef"),
 				},
+				StorageRoot: NewStorageRoot(emptyStorageRootHash),
 			},
 			common.BytesToAddress([]byte{0xff, 0xff, 0xff}): {
 				StorageWrites: map[common.Hash]map[uint32]common.Hash{
@@ -82,6 +83,7 @@ func makeTestConstructionBAL() *ConstructionBlockAccessList {
 				CodeChange: map[uint32][]byte{
 					0: common.Hex2Bytes("deadbeef"),
 				},
+				StorageRoot: NewStorageRoot(common.HexToHash("0x1234")),
 			},
 		},
 	}
@@ -105,6 +107,198 @@ func TestBALEncoding(t *testing.T) {
 	if !reflect.DeepEqual(bal.ToEncodingObj(), &dec) {
 		t.Fatal("decoded BAL doesn't match")
 	}
+}
+
+func TestBALStorageRootForkGating(t *testing.T) {
+	withRoots := makeTestConstructionBAL().ToEncodingObj()
+	if err := withRoots.ValidateWithStorageRoots(math.MaxUint64, 10000, true); err != nil {
+		t.Fatalf("bogota validation failed: %v", err)
+	}
+	if err := withRoots.ValidateWithStorageRoots(math.MaxUint64, 10000, false); err == nil {
+		t.Fatal("pre-bogota validation accepted storage roots")
+	}
+
+	withoutRoots := withRoots.Copy()
+	for i := range *withoutRoots {
+		(*withoutRoots)[i].StorageRoot = nil
+	}
+	if err := withoutRoots.ValidateWithStorageRoots(math.MaxUint64, 10000, false); err != nil {
+		t.Fatalf("pre-bogota validation failed: %v", err)
+	}
+	if err := withoutRoots.ValidateWithStorageRoots(math.MaxUint64, 10000, true); err == nil {
+		t.Fatal("bogota validation accepted state changes without storage roots")
+	}
+
+	if withRoots.HashWithStorageRoots(false) != withoutRoots.HashWithStorageRoots(false) {
+		t.Fatal("pre-bogota hash must not depend on storage roots")
+	}
+	if withRoots.HashWithStorageRoots(true) == withoutRoots.HashWithStorageRoots(false) {
+		t.Fatal("bogota and pre-bogota encodings should produce distinct hashes")
+	}
+}
+
+func TestBALStorageRootForkGatedDecode(t *testing.T) {
+	withRoots := makeTestConstructionBAL().ToEncodingObj()
+
+	var legacyBuf bytes.Buffer
+	if err := withRoots.encodeRLPWithoutStorageRoots(&legacyBuf); err != nil {
+		t.Fatalf("encoding legacy BAL failed: %v", err)
+	}
+	var legacy BlockAccessList
+	if err := legacy.DecodeRLP(rlp.NewStream(bytes.NewReader(legacyBuf.Bytes()), 0)); err != nil {
+		t.Fatalf("decoding legacy BAL failed: %v", err)
+	}
+	if err := legacy.ValidateWithStorageRoots(math.MaxUint64, 10000, false); err != nil {
+		t.Fatalf("legacy BAL validation failed: %v", err)
+	}
+	if err := legacy.ValidateWithStorageRoots(math.MaxUint64, 10000, true); err == nil {
+		t.Fatal("bogota validation accepted decoded legacy BAL")
+	}
+	for _, account := range legacy {
+		if account.StorageRoot != nil {
+			t.Fatal("decoded legacy BAL should not contain storage roots")
+		}
+	}
+
+	var bogotaBuf bytes.Buffer
+	if err := withRoots.EncodeRLP(&bogotaBuf); err != nil {
+		t.Fatalf("encoding bogota BAL failed: %v", err)
+	}
+	var bogota BlockAccessList
+	if err := bogota.DecodeRLP(rlp.NewStream(bytes.NewReader(bogotaBuf.Bytes()), 0)); err != nil {
+		t.Fatalf("decoding bogota BAL failed: %v", err)
+	}
+	if err := bogota.ValidateWithStorageRoots(math.MaxUint64, 10000, true); err != nil {
+		t.Fatalf("bogota BAL validation failed: %v", err)
+	}
+	if err := bogota.ValidateWithStorageRoots(math.MaxUint64, 10000, false); err == nil {
+		t.Fatal("pre-bogota validation accepted decoded storage roots")
+	}
+}
+
+func TestBALStorageRootRLPEncoding(t *testing.T) {
+	emptyAccount := testStateChangingAccount(NewStorageRoot(emptyStorageRootHash))
+	emptyFields := accountAccessRLPFields(t, emptyAccount)
+	if len(emptyFields) != 7 {
+		t.Fatalf("empty-root account encoded %d fields, want 7", len(emptyFields))
+	}
+	if !bytes.Equal(emptyFields[6], rlp.EmptyString) {
+		t.Fatalf("empty storage root encoded as %x, want 80", emptyFields[6])
+	}
+
+	nonEmptyRoot := common.HexToHash("0xabcdef")
+	nonEmptyAccount := testStateChangingAccount(NewStorageRoot(nonEmptyRoot))
+	nonEmptyFields := accountAccessRLPFields(t, nonEmptyAccount)
+	if len(nonEmptyFields) != 7 {
+		t.Fatalf("non-empty-root account encoded %d fields, want 7", len(nonEmptyFields))
+	}
+	content, rest, err := rlp.SplitString(nonEmptyFields[6])
+	if err != nil {
+		t.Fatalf("non-empty storage root is not an RLP string: %v", err)
+	}
+	if len(rest) != 0 {
+		t.Fatalf("non-empty storage root has trailing RLP data: %x", rest)
+	}
+	if len(content) != common.HashLength || !bytes.Equal(content, nonEmptyRoot[:]) {
+		t.Fatalf("non-empty storage root content = %x, want %x", content, nonEmptyRoot[:])
+	}
+
+	accessOnly := AccountAccess{
+		Address:      common.BytesToAddress([]byte{0x03}),
+		StorageReads: []*uint256.Int{uint256.NewInt(1)},
+	}
+	if accessOnly.hasStateChanges() {
+		t.Fatal("storage reads alone must not count as state changes")
+	}
+	accessOnlyFields := accountAccessRLPFields(t, accessOnly)
+	if len(accessOnlyFields) != 6 {
+		t.Fatalf("access-only account encoded %d fields, want 6", len(accessOnlyFields))
+	}
+}
+
+func TestBALStorageRootRLPDecoding(t *testing.T) {
+	account := testStateChangingAccount(NewStorageRoot(emptyStorageRootHash))
+	var dec AccountAccess
+	if err := rlp.DecodeBytes(encodeAccountAccessRLP(t, account), &dec); err != nil {
+		t.Fatalf("decoding empty-string storage root failed: %v", err)
+	}
+	if dec.StorageRoot == nil || !dec.StorageRoot.Empty || dec.StorageRoot.Root != emptyStorageRootHash {
+		t.Fatalf("decoded storage root = %#v, want empty root", dec.StorageRoot)
+	}
+
+	listRoot, err := rlp.EncodeToBytes(struct {
+		Root  common.Hash
+		Empty bool
+	}{Root: emptyStorageRootHash, Empty: true})
+	if err != nil {
+		t.Fatalf("encoding list-form root failed: %v", err)
+	}
+	fields := accountAccessRLPFields(t, account)
+	fields[6] = listRoot
+	listFormAccount, err := rlp.MergeListValues(fields)
+	if err != nil {
+		t.Fatalf("merging list-form account failed: %v", err)
+	}
+	if err := rlp.DecodeBytes(listFormAccount, &dec); err == nil {
+		t.Fatal("decoded list-form storage root")
+	}
+
+	shortRoot := []byte{0x82, 0x01, 0x02}
+	fields[6] = shortRoot
+	shortRootAccount, err := rlp.MergeListValues(fields)
+	if err != nil {
+		t.Fatalf("merging short-root account failed: %v", err)
+	}
+	if err := rlp.DecodeBytes(shortRootAccount, &dec); err == nil {
+		t.Fatal("decoded invalid-length storage root")
+	}
+}
+
+func TestBALStorageRootBogotaValidation(t *testing.T) {
+	missingRoot := testStateChangingAccount(nil)
+	balMissing := BlockAccessList{missingRoot}
+	if err := balMissing.ValidateWithStorageRoots(math.MaxUint64, 1, true); err == nil {
+		t.Fatal("bogota validation accepted state-changing account without storage root")
+	}
+
+	accessOnlyWithRoot := AccountAccess{
+		Address:      common.BytesToAddress([]byte{0x03}),
+		StorageReads: []*uint256.Int{uint256.NewInt(1)},
+		StorageRoot:  NewStorageRoot(emptyStorageRootHash),
+	}
+	balAccessOnly := BlockAccessList{accessOnlyWithRoot}
+	if err := balAccessOnly.ValidateWithStorageRoots(math.MaxUint64, 1, true); err == nil {
+		t.Fatal("bogota validation accepted access-only account with storage root")
+	}
+}
+
+func testStateChangingAccount(root *StorageRoot) AccountAccess {
+	return AccountAccess{
+		Address: common.BytesToAddress([]byte{0x02}),
+		BalanceChanges: []encodingBalanceChange{{
+			BlockAccessIndex: 0,
+			PostBalance:      uint256.NewInt(1),
+		}},
+		StorageRoot: root,
+	}
+}
+
+func encodeAccountAccessRLP(t *testing.T, account AccountAccess) []byte {
+	t.Helper()
+	enc, err := rlp.EncodeToBytes(&account)
+	if err != nil {
+		t.Fatalf("encoding account access failed: %v", err)
+	}
+	return enc
+}
+
+func accountAccessRLPFields(t *testing.T, account AccountAccess) [][]byte {
+	t.Helper()
+	fields, err := rlp.SplitListValues(encodeAccountAccessRLP(t, account))
+	if err != nil {
+		t.Fatalf("splitting account RLP failed: %v", err)
+	}
+	return fields
 }
 
 func TestConstructionBALMerge(t *testing.T) {
@@ -244,6 +438,7 @@ func makeTestAccountAccess(sort bool) AccountAccess {
 		BalanceChanges: balances,
 		NonceChanges:   nonces,
 		CodeChanges:    codes,
+		StorageRoot:    NewStorageRoot(common.HexToHash("0x1234")),
 	}
 }
 

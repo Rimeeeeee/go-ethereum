@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/history"
 	"github.com/ethereum/go-ethereum/core/txpool/blobpool"
 	"github.com/ethereum/go-ethereum/core/txpool/legacypool"
+	"github.com/ethereum/go-ethereum/core/types/bal"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/miner"
 )
@@ -70,6 +71,9 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		TxSyncDefaultTimeout    time.Duration `toml:",omitempty"`
 		TxSyncMaxTimeout        time.Duration `toml:",omitempty"`
 		RangeLimit              uint64        `toml:",omitempty"`
+		BALExecutionMode        bal.BALExecutionMode
+		PrefetchWorkers         uint
+		BlockingPrefetch        bool
 	}
 	var enc Config
 	enc.Genesis = c.Genesis
@@ -125,6 +129,9 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.TxSyncDefaultTimeout = c.TxSyncDefaultTimeout
 	enc.TxSyncMaxTimeout = c.TxSyncMaxTimeout
 	enc.RangeLimit = c.RangeLimit
+	enc.BALExecutionMode = c.BALExecutionMode
+	enc.PrefetchWorkers = c.PrefetchWorkers
+	enc.BlockingPrefetch = c.BlockingPrefetch
 	return &enc, nil
 }
 
@@ -184,6 +191,9 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		TxSyncDefaultTimeout    *time.Duration `toml:",omitempty"`
 		TxSyncMaxTimeout        *time.Duration `toml:",omitempty"`
 		RangeLimit              *uint64        `toml:",omitempty"`
+		BALExecutionMode        *bal.BALExecutionMode
+		PrefetchWorkers         *uint
+		BlockingPrefetch        *bool
 	}
 	var dec Config
 	if err := unmarshal(&dec); err != nil {
@@ -347,6 +357,15 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.RangeLimit != nil {
 		c.RangeLimit = *dec.RangeLimit
+	}
+	if dec.BALExecutionMode != nil {
+		c.BALExecutionMode = *dec.BALExecutionMode
+	}
+	if dec.PrefetchWorkers != nil {
+		c.PrefetchWorkers = *dec.PrefetchWorkers
+	}
+	if dec.BlockingPrefetch != nil {
+		c.BlockingPrefetch = *dec.BlockingPrefetch
 	}
 	return nil
 }

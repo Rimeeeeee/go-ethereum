@@ -1,12 +1,6 @@
 on:
   push:
-    branches:
-      - master
-      - bal-devnet-7
   pull_request:
-    branches:
-      - master
-      - bal-devnet-7
   workflow_dispatch:
 
 # Free runner capacity by cancelling superseded PR runs.

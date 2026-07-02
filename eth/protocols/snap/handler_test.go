@@ -305,10 +305,10 @@ func TestGetAccessListResponseDecoding(t *testing.T) {
 						t.Fatalf("decode failed: %v", err)
 					}
 					if bytes.Equal(got, bytes1) && !reflect.DeepEqual(obj, bal1) {
-						t.Fatalf("decode failed: got %x, want %x", obj, bal1)
+						t.Fatalf("decode failed: got %v, want %v", obj, bal1)
 					}
 					if bytes.Equal(got, bytes2) && !reflect.DeepEqual(obj, bal2) {
-						t.Fatalf("decode failed: got %x, want %x", obj, bal2)
+						t.Fatalf("decode failed: got %v, want %v", obj, bal2)
 					}
 				}
 			}

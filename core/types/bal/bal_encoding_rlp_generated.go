@@ -71,6 +71,12 @@ func (obj *AccountAccess) EncodeRLP(_w io.Writer) error {
 		w.ListEnd(_tmp17)
 	}
 	w.ListEnd(_tmp15)
+	_tmp18 := obj.StorageRoot != nil
+	if _tmp18 {
+		if err := obj.StorageRoot.EncodeRLP(w); err != nil {
+			return err
+		}
+	}
 	w.ListEnd(_tmp0)
 	return w.Flush()
 }
@@ -262,6 +268,14 @@ func (obj *AccountAccess) DecodeRLP(dec *rlp.Stream) error {
 			return err
 		}
 		_tmp0.CodeChanges = _tmp19
+		// StorageRoot:
+		if dec.MoreDataInList() {
+			_tmp23 := new(StorageRoot)
+			if err := _tmp23.DecodeRLP(dec); err != nil {
+				return err
+			}
+			_tmp0.StorageRoot = _tmp23
+		}
 		if err := dec.ListEnd(); err != nil {
 			return err
 		}
