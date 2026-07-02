@@ -21,6 +21,7 @@ func (a AccountAccess) MarshalJSON() ([]byte, error) {
 		BalanceChanges []encodingBalanceChange `json:"balanceChanges"`
 		NonceChanges   []encodingAccountNonce  `json:"nonceChanges"`
 		CodeChanges    []encodingCodeChange    `json:"codeChanges"`
+		StorageRoot    *StorageRoot            `json:"storageRoot,omitempty"`
 	}
 	var enc AccountAccess
 	enc.Address = a.Address
@@ -34,6 +35,7 @@ func (a AccountAccess) MarshalJSON() ([]byte, error) {
 	enc.BalanceChanges = a.BalanceChanges
 	enc.NonceChanges = a.NonceChanges
 	enc.CodeChanges = a.CodeChanges
+	enc.StorageRoot = a.StorageRoot
 	return json.Marshal(&enc)
 }
 
@@ -46,6 +48,7 @@ func (a *AccountAccess) UnmarshalJSON(input []byte) error {
 		BalanceChanges []encodingBalanceChange `json:"balanceChanges"`
 		NonceChanges   []encodingAccountNonce  `json:"nonceChanges"`
 		CodeChanges    []encodingCodeChange    `json:"codeChanges"`
+		StorageRoot    *StorageRoot            `json:"storageRoot,omitempty"`
 	}
 	var dec AccountAccess
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -71,6 +74,9 @@ func (a *AccountAccess) UnmarshalJSON(input []byte) error {
 	}
 	if dec.CodeChanges != nil {
 		a.CodeChanges = dec.CodeChanges
+	}
+	if dec.StorageRoot != nil {
+		a.StorageRoot = dec.StorageRoot
 	}
 	return nil
 }

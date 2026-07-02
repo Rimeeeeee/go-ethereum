@@ -103,7 +103,7 @@ type SimulatedBeacon struct {
 
 func payloadVersion(config *params.ChainConfig, time uint64) engine.PayloadVersion {
 	switch config.LatestFork(time) {
-	case forks.Amsterdam:
+	case forks.Amsterdam, forks.Bogota:
 		return engine.PayloadV4
 	case forks.BPO5, forks.BPO4, forks.BPO3, forks.BPO2, forks.BPO1, forks.Osaka, forks.Prague, forks.Cancun:
 		return engine.PayloadV3
@@ -208,7 +208,7 @@ func (c *SimulatedBeacon) sealBlock(withdrawals []*types.Withdrawal, timestamp u
 		Random:                random,
 		BeaconRoot:            &common.Hash{},
 	}
-	if c.eth.BlockChain().Config().LatestFork(timestamp) == forks.Amsterdam {
+	if latestFork := c.eth.BlockChain().Config().LatestFork(timestamp); latestFork == forks.Amsterdam || latestFork == forks.Bogota {
 		slotNumber := uint64(0)
 		attribute.SlotNumber = &slotNumber
 	}

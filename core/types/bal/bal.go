@@ -51,6 +51,10 @@ type ConstructionAccountAccess struct {
 	// CodeChange contains the post-state contract code of an account keyed
 	// by tx index.
 	CodeChange map[uint32][]byte `json:"codeChange,omitempty"`
+
+	// StorageRoot is the post-block storage trie root for accounts with state
+	// changes. It is omitted for access-only accounts.
+	StorageRoot *StorageRoot `json:"storageRoot,omitempty"`
 }
 
 // NewConstructionAccountAccess initializes the account access object.
@@ -136,6 +140,20 @@ func (b *ConstructionBlockAccessList) BalanceChange(txIdx uint32, address common
 	b.Accounts[address].BalanceChanges[txIdx] = balance.Clone()
 }
 
+// SetStorageRoot records the post-block storage root for a mutated account.
+func (b *ConstructionBlockAccessList) SetStorageRoot(address common.Address, root common.Hash) {
+	if _, ok := b.Accounts[address]; !ok {
+		b.Accounts[address] = NewConstructionAccountAccess()
+	}
+	b.Accounts[address].StorageRoot = NewStorageRoot(root)
+}
+
+// HasStateChanges reports whether the entry carries writes or account metadata changes.
+func (a *ConstructionAccountAccess) HasStateChanges() bool {
+	return len(a.StorageWrites) > 0 || len(a.BalanceChanges) > 0 ||
+		len(a.NonceChanges) > 0 || len(a.CodeChange) > 0
+}
+
 // PrettyPrint returns a human-readable representation of the access list
 func (b *ConstructionBlockAccessList) PrettyPrint() string {
 	enc := b.ToEncodingObj()
@@ -191,6 +209,9 @@ func (b *ConstructionBlockAccessList) Merge(other *ConstructionBlockAccessList) 
 		for txIdx, code := range otherAcc.CodeChange {
 			acc.CodeChange[txIdx] = code
 		}
+		if otherAcc.StorageRoot != nil {
+			acc.StorageRoot = otherAcc.StorageRoot.Copy()
+		}
 	}
 }
 
@@ -219,6 +240,9 @@ func (b *ConstructionBlockAccessList) Copy() *ConstructionBlockAccessList {
 			codes[index] = bytes.Clone(code)
 		}
 		aaCopy.CodeChange = codes
+		if aa.StorageRoot != nil {
+			aaCopy.StorageRoot = aa.StorageRoot.Copy()
+		}
 		res.Accounts[addr] = &aaCopy
 	}
 	return res

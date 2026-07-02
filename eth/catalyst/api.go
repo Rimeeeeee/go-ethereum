@@ -226,8 +226,8 @@ func (api *ConsensusAPI) ForkchoiceUpdatedV4(ctx context.Context, update engine.
 			return engine.STATUS_INVALID, attributesErr("missing beacon root")
 		case params.SlotNumber == nil:
 			return engine.STATUS_INVALID, attributesErr("missing slot number")
-		case !api.checkFork(params.Timestamp, forks.Amsterdam):
-			return engine.STATUS_INVALID, unsupportedForkErr("fcuV4 must only be called for amsterdam payloads")
+		case !api.checkFork(params.Timestamp, forks.Amsterdam, forks.Bogota):
+			return engine.STATUS_INVALID, unsupportedForkErr("fcuV4 must only be called for amsterdam/bogota payloads")
 		}
 	}
 	// TODO(matt): the spec requires that fcu is applied when called on a valid
@@ -508,6 +508,7 @@ func (api *ConsensusAPI) GetPayloadV6(payloadID engine.PayloadID) (*engine.Execu
 		[]engine.PayloadVersion{engine.PayloadV4},
 		[]forks.Fork{
 			forks.Amsterdam,
+			forks.Bogota,
 		})
 }
 
@@ -804,10 +805,12 @@ func (api *ConsensusAPI) NewPayloadV5(ctx context.Context, params engine.Executa
 		return invalidStatus, paramsErr("nil beaconRoot post-cancun")
 	case executionRequests == nil:
 		return invalidStatus, paramsErr("nil executionRequests post-prague")
+	case !api.checkFork(params.Timestamp, forks.Amsterdam, forks.Bogota):
+		return invalidStatus, unsupportedForkErr("newPayloadV5 must only be called for amsterdam/bogota payloads")
 	case params.SlotNumber == nil:
 		return invalidStatus, paramsErr("nil slotnumber post-amsterdam")
-	case !api.checkFork(params.Timestamp, forks.Amsterdam):
-		return invalidStatus, unsupportedForkErr("newPayloadV5 must only be called for amsterdam payloads")
+	case params.BlockAccessList == nil:
+		return invalidStatus, paramsErr("nil block access list post-amsterdam")
 	}
 	requests := convertRequests(executionRequests)
 	if err := validateRequests(requests); err != nil {
