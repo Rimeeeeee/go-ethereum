@@ -122,10 +122,11 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 		//
 		// If the block includes an attached access list, validate it directly here.
 		if block.AccessList() != nil {
-			computed := block.AccessList().Hash()
+			storageRoots := v.config.IsBogota(block.Number(), block.Time())
+			computed := block.AccessList().HashWithStorageRoots(storageRoots)
 			if *block.Header().BlockAccessListHash != computed {
 				return fmt.Errorf("access list hash mismatch, computed: %x, remote: %x", computed, *block.Header().BlockAccessListHash)
-			} else if err := block.AccessList().Validate(block.GasLimit(), len(block.Transactions())); err != nil {
+			} else if err := block.AccessList().ValidateWithStorageRoots(block.GasLimit(), len(block.Transactions()), storageRoots); err != nil {
 				return fmt.Errorf("invalid block access list: %v", err)
 			}
 		}
@@ -182,6 +183,7 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	} else if res.Requests != nil {
 		return errors.New("block has requests before prague fork")
 	}
+	root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number))
 	// Verify Block-level accessList once Amsterdam is enabled
 	if v.config.IsAmsterdam(block.Number(), block.Time()) {
 		if res.Bal == nil {
@@ -190,18 +192,22 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 		if block.Header().BlockAccessListHash == nil {
 			return errors.New("block access list hash not set in header")
 		}
+		storageRoots := v.config.IsBogota(block.Number(), block.Time())
+		if storageRoots {
+			statedb.FillBlockAccessListStorageRoots(res.Bal)
+		}
 		enc := res.Bal.ToEncodingObj()
-		local, remote := enc.Hash(), *block.Header().BlockAccessListHash
+		local, remote := enc.HashWithStorageRoots(storageRoots), *block.Header().BlockAccessListHash
 		if local != remote {
 			return fmt.Errorf("access list hash mismatch, local: %x, remote: %x", local, remote)
 		}
-		if err := enc.Validate(block.GasLimit(), len(block.Transactions())); err != nil {
+		if err := enc.ValidateWithStorageRoots(block.GasLimit(), len(block.Transactions()), storageRoots); err != nil {
 			return fmt.Errorf("invalid block access list: %v", err)
 		}
 	}
 	// Validate the state root against the received state root and throw
 	// an error if they don't match.
-	if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
+	if header.Root != root {
 		return fmt.Errorf("invalid merkle root (remote: %x local: %x) dberr: %w", header.Root, root, statedb.Error())
 	}
 	return nil
